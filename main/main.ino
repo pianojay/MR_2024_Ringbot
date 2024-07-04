@@ -35,9 +35,18 @@ PID armPid(&rolli, &armao, &rolls, armkp, armki, armkd, DIRECT);
 #define Minrolls -45  // manual tuning
 #define Maxrolls 45
 
-// MPU6050; Check MPU6050IMU.ino
-MPU6050lib mpu;
-// Not implemented here
+// MPU6050; Check RingIMU.ino, which should be in a same file.
+// Forward Declaration because of how .ino is compiled
+namespace RingIMU {
+void RingIMUsetup();
+void RingIMUloop();
+void ComplementaryUpdate(float ay, float az, float gyroy);
+void MadgwickQuaternionUpdate(float ax, float ay, float az, float gyrox, float gyroy, float gyroz);
+extern float roll, roll_C;
+extern bool quiet;
+}
+
+
 
 bool isfallen = false;
 
@@ -66,11 +75,27 @@ void setup() {
   arm.attach(armPin);
 
   // And then MPU6050 setup
+  RingIMU::RingIMUsetup();
+}
+
+char buffer[128];
+void format2f(float x, float y, int width = 8, int precision = 2) {
+  char x_str[10], y_str[10];
+  dtostrf(x, width, precision, x_str);
+  dtostrf(y, width, precision, y_str);
+  sprintf(buffer, "%s, %s", x_str, y_str);
+  return;
 }
 
 void loop() {
-  // MPU6050 stuff; -> get roll
-  // rolli = roll;
+  // MPU6050 stuff; -> get roll data
+  RingIMU::RingIMUloop();
+  rolli = RingIMU::roll;
+
+  format2f(RingIMU::roll, RingIMU::roll_C);
+  BTS.println(buffer); // Compare between Madgwick and Complementary
+
+
 
   checkfall();
   if (isfallen) {
@@ -104,6 +129,18 @@ void loop() {
         BTS.println("Roll Right");
         rolls += 5;
         break;
+      case 'q':
+        if (IByte == 'q') {
+          if (!RingIMU::quiet) {
+            BTS.println("");
+            BTS.println("quiet");
+          } else {
+            BTS.println("");
+            BTS.println("verbose");
+          }
+          IByte = 0;
+          RingIMU::quiet = !RingIMU::quiet;
+        }
       default:
         break;
     }
@@ -112,7 +149,7 @@ void loop() {
     ring.writeMicroseconds(ringv);
     rolls = constrain(rolls, Minrolls, Maxrolls);
     // armPid.SetTunings(,,);
-    // for interactive tuning?
+    // ^ for interactive tuning?
     armPid.Compute();
     arm.write(armao);
   }
