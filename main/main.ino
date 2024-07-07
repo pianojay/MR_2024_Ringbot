@@ -1,10 +1,21 @@
-#include <SoftwareSerial.h>  // for Bluetooth
-#include <PID_v1.h>
-#include <Servo.h>    // for BLDC and servo
-#include <Wire.h>     // for MPU6050
-#include <MPU6050.h>  // for MPU6050; https://github.com/ElectronicCats/mpu6050
+/*
+  #################################################################
+          main.ino: setup() and loop() is here.
 
-// Based on Uno but surely compatible with Nano.
+          Needs RingIMU.ino in a same folder for RingIMU::roll
+
+          TODO:
+            Implement checkfall(), standup()
+            Parameter calibrations for actual hardware
+  #################################################################
+*/
+
+#include <SoftwareSerial.h>  // for Bluetooth
+#include <PID_v1.h>          // for PID control
+#include <Servo.h>           // for BLDC and servo
+#include <Wire.h>            // for MPU6050
+#include <MPU6050.h>         // for MPU6050; https://github.com/ElectronicCats/mpu6050
+
 
 // HC-O6 BlueTooth Serial connections; Using PuTTy
 const byte rxPin = 2;
@@ -12,17 +23,19 @@ const byte txPin = 3;
 SoftwareSerial BTS(rxPin, txPin);
 int IByte;
 
+
 // BLDC motor; Create PWM signal via Servo.h for ESC (https://joyonclear.tistory.com/9)
 const byte ringPin = 4;
 Servo ring;
 float ringv = 1500, ringvs = 1500;  // current, desired
-float factor = 0.1;                 // Manual Tuning
+float factor = 0.1;                 // Manual Tuning (EMA alpha factor)
 #define MinRingv 1000               // based on PWM signal
 #define MaxRingv 2000
 
-void ringvsmoother() {  // exponential moving average
+void ringvsmoother() {  // exponential moving average, for smooth control
   ringv = ringv * (1.0 - factor) + ringvs * factor;
 }
+
 
 // Servo motor: DS3218MG
 const byte armPin = 5;
@@ -35,8 +48,10 @@ PID armPid(&rolli, &armao, &rolls, armkp, armki, armkd, DIRECT);
 #define Minrolls -45  // manual tuning
 #define Maxrolls 45
 
+
 // MPU6050; Check RingIMU.ino, which should be in a same file.
-// Forward Declaration because of how .ino is compiled
+// Forward Declaration because of how .ino is compiled.
+// Pins: 12, 13, A4, A5
 namespace RingIMU {
 void RingIMUsetup();
 void RingIMUloop();
@@ -47,7 +62,7 @@ extern bool quiet;
 }
 
 
-
+// Detecting falling and standing up
 bool isfallen = false;
 
 void checkfall() {
@@ -56,7 +71,19 @@ void checkfall() {
 }
 
 void standup() {
+  // executed when isfallen = true
   // Do something
+}
+
+
+// This is for data reporting (temporary)
+char buffer[128];
+void format2f(float x, float y, int width = 8, int precision = 2) {
+  char x_str[10], y_str[10];
+  dtostrf(x, width, precision, x_str);
+  dtostrf(y, width, precision, y_str);
+  sprintf(buffer, "%s, %s", x_str, y_str);
+  return;
 }
 
 
@@ -78,14 +105,6 @@ void setup() {
   RingIMU::RingIMUsetup();
 }
 
-char buffer[128];
-void format2f(float x, float y, int width = 8, int precision = 2) {
-  char x_str[10], y_str[10];
-  dtostrf(x, width, precision, x_str);
-  dtostrf(y, width, precision, y_str);
-  sprintf(buffer, "%s, %s", x_str, y_str);
-  return;
-}
 
 void loop() {
   // MPU6050 stuff; -> get roll data
@@ -93,10 +112,9 @@ void loop() {
   rolli = RingIMU::roll;
 
   format2f(RingIMU::roll, RingIMU::roll_C);
-  BTS.println(buffer); // Compare between Madgwick and Complementary
+  BTS.println(buffer);  // Compare roll value between Madgwick and Complementary
 
-
-
+  // Detect fall and then stand up
   checkfall();
   if (isfallen) {
     BTS.println("");
@@ -105,6 +123,7 @@ void loop() {
     standup();
   }
 
+  // Read Bluetooth input
   if (BTS.available()) {
     IByte = BTS.read();
     switch (IByte) {
@@ -141,15 +160,20 @@ void loop() {
           IByte = 0;
           RingIMU::quiet = !RingIMU::quiet;
         }
+        break;
       default:
         break;
     }
+
+    // Update BLDC
     ringvs = constrain(ringvs, MinRingv, MaxRingv);
     ringvsmoother();
     ring.writeMicroseconds(ringv);
+
+    // Update servo
     rolls = constrain(rolls, Minrolls, Maxrolls);
     // armPid.SetTunings(,,);
-    // ^ for interactive tuning?
+    // ^ for interactive tuning, if applicable
     armPid.Compute();
     arm.write(armao);
   }

@@ -1,45 +1,48 @@
 /*
-  ##################################################
-          RingIMU: for Ringbot main.ino
+  #################################################################
+          RingIMU.ino: for Ringbot main.ino
           
-          All are inside separate namespace for encapsularization.
+          All IMU related stuffs are inside separate namespace.
           So to access these variables in main.ino,
           you need RingIMU as a namespace name.
 
           Put this in a same folder with main.ino
-          so that it will be compiled together.
-  ##################################################
+          so that it will be compiled together by ArduinoIDE
+          (concatenation)
+  #################################################################
 */
 
 /* MPU6050 Basic Example with IMU; by: Kris Winer; date: May 10, 2014
   license: Beerware - Use this code however you'd like. If you find it useful you can buy me a beer some time.
+
+  Hardware setup:
+    MPU6050 Breakout --------- Arduino
+    VCC --------------------- 3.3V
+    GND ---------------------- GND
+    SCL ----------------------- A5  I2C data line
+    SDA ----------------------- A4  I2C clock line
+    ADD ---------------------- GND  Set address to 0x68
+    INT ----------------------- 12  Interrupt pin
+
+    LED ----------------------- 13  blinkPin
 */
+
+
+// HC-O6 BlueTooth BTS connections; Using PuTTy
+// Defined at main.ino
+extern SoftwareSerial BTS;
 
 
 namespace RingIMU {
 
 MPU6050lib mpu;
 
-// HC-O6 BlueTooth BTS connections; Using PuTTy
-boolean quiet = false;
-
-// For formatted strings:
-char buffer[128];
-void format3f(float x, float y, float z, int width = 8, int precision = 2) {
-  char x_str[10], y_str[10], z_str[10];
-  dtostrf(x, width, precision, x_str);
-  dtostrf(y, width, precision, y_str);
-  dtostrf(z, width, precision, z_str);
-  sprintf(buffer, "%s, %s, %s", x_str, y_str, z_str);
-  return;
-}
-
-
-float aRes, gRes;  // scale resolutions per LSB for the sensors
-// Pin definitions
-int intPin = 12;     // These can be changed, 2 and 3 are the Arduinos ext int pins
-#define blinkPin 13  // Blink LED on Teensy or Pro Mini when updating
+static byte intPin = 12;    // These can be changed, 2 and 3 are the Arduinos ext int pins
+static byte blinkPin = 13;  // Blink LED when updating
 boolean blinkOn = false;
+
+// parameters for sensoring and post-processing
+float aRes, gRes;                                             // scale resolutions per LSB for the sensors
 int16_t accelCount[3];                                        // Stores the 16-bit signed accelerometer sensor output
 float ax, ay, az;                                             // Stores the real accel value in g's
 int16_t gyroCount[3];                                         // Stores the 16-bit signed gyro sensor output
@@ -51,16 +54,31 @@ float SelfTest[6];
 float q[4] = { 1.0f, 0.0f, 0.0f, 0.0f };  // vector to hold quaternion
 uint32_t delt_t = 0;                      // used to control display output rate
 uint32_t count = 0;                       // used to control display output rate
-float pitch, yaw, roll, roll_C;            // Last one is for complementary filter (separate result)
+float pitch, yaw, roll, roll_C;           // roll_C is from complementary filter
 
-// parameters for 6 DoF sensor fusion calculations
+// parameters for 6 DoF sensor fusion calculations (Madgwick)
 float GyroMeasError = PI * (40.0f / 180.0f);     // gyroscope measurement error in rads/s (start at 60 deg/s), then reduce after ~10 s to 3
 float beta = sqrt(3.0f / 4.0f) * GyroMeasError;  // compute beta
 float GyroMeasDrift = PI * (2.0f / 180.0f);      // gyroscope measurement drift in rad/s/s (start at 0.0 deg/s/s)
 float zeta = sqrt(3.0f / 4.0f) * GyroMeasDrift;  // compute zeta, the other free parameter in the Madgwick scheme usually set to a small or zero value
-float deltat = 0.0f;                             // integration interval for both filter schemes
+float deltat = 0.0f;                             // integration interval for both filter schemes (and for Complementary filter)
 uint32_t lastUpdate = 0, firstUpdate = 0;        // used to calculate integration interval
 uint32_t Now = 0;                                // used to calculate integration interval
+
+
+// This is for data reporting:
+char buffer[128];
+void format3f(float x, float y, float z, int width = 8, int precision = 2) {
+  char x_str[10], y_str[10], z_str[10];
+  dtostrf(x, width, precision, x_str);
+  dtostrf(y, width, precision, y_str);
+  dtostrf(z, width, precision, z_str);
+  sprintf(buffer, "%s, %s, %s", x_str, y_str, z_str);
+  return;
+}
+
+boolean quiet = false;  // verbose or quiet
+
 
 void RingIMUsetup() {
   Wire.begin();
@@ -98,8 +116,6 @@ void RingIMUsetup() {
       BTS.println("Pass Selftest!");
 
       mpu.calibrateMPU6050(gyroBias, accelBias);  // Calibrate gyro and accelerometers, load biases in bias registers
-      BTS.println("");
-      BTS.println("");
       BTS.println("MPU6050 bias");
       BTS.println("       x       y       z");
       format3f(1000 * accelBias[0], 1000 * accelBias[1], 1000 * accelBias[2]);
@@ -110,8 +126,6 @@ void RingIMUsetup() {
       BTS.println(" o/s");
 
       mpu.initMPU6050();
-      BTS.println("");
-      BTS.println("");
       BTS.println("MPU6050 initialized for active data mode....");  // Initialize device for active mode read of acclerometer, gyroscope, and temperature
     } else {
       BTS.print("Could not connect to MPU6050: 0x");
@@ -123,9 +137,11 @@ void RingIMUsetup() {
   delay(1000);
 }
 
+
 void RingIMUloop() {
   // If data ready bit set, all data registers have new data
 
+  // Read sensor data as available:
   if (mpu.readByte(MPU6050_ADDRESS, INT_STATUS) & 0x01) {  // check if data ready interrupt
     mpu.readAccelData(accelCount);                         // Read the x/y/z adc values
     aRes = mpu.getAres();
@@ -161,7 +177,7 @@ void RingIMUloop() {
 
   // Serial print and/or display at 0.5 s rate independent of data rates
   delt_t = millis() - count;
-  if (delt_t > 100) {  // update LCD once per cycle independent of read rate
+  if (delt_t > 500) {  // update LCD once per cycle independent of read rate
     digitalWrite(blinkPin, blinkOn);
 
     // Tait-Bryan angles (yaw, pitch, roll; from homogeneous rotation matrix from quaternions)
@@ -206,6 +222,7 @@ void RingIMUloop() {
   }
 }
 
+
 // Implementation of a complementary filter by https://github.com/junbeomLim
 // https://github.com/junbeomLim/forward_rolling_robot/blob/master/forward_rolling_robot/run_robot.py
 void ComplementaryUpdate(float ay, float az, float gyroy) {
@@ -217,6 +234,7 @@ void ComplementaryUpdate(float ay, float az, float gyroy) {
   angle = alpha * angle + (1 - alpha) * a_angle_y;
   roll_C = angle;
 }
+
 
 // Implementation of Sebastian Madgwick's "...efficient orientation filter for... inertial/magnetic sensor arrays"
 // (see https://x-io.co.uk/open-source-imu-and-ahrs-algorithms/ for examples and more details)
@@ -311,4 +329,5 @@ void MadgwickQuaternionUpdate(float ax, float ay, float az, float gyrox, float g
   q[3] = q4 * norm;
 }
 
-}
+
+}  // End of namespace RingIMU
