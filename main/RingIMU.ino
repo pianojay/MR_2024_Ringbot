@@ -32,13 +32,13 @@
 // Defined at main.ino
 extern SoftwareSerial BTS;
 
+#define intPin 12    // These can be changed, 2 and 3 are the Arduinos ext int pins
+#define blinkPin 13  // Blink LED when updating
 
 namespace RingIMU {
 
 MPU6050lib mpu;
 
-static byte intPin = 12;    // These can be changed, 2 and 3 are the Arduinos ext int pins
-static byte blinkPin = 13;  // Blink LED when updating
 boolean blinkOn = false;
 
 // parameters for sensoring and post-processing
@@ -77,7 +77,7 @@ void format3f(float x, float y, float z, int width = 8, int precision = 2) {
   return;
 }
 
-boolean quiet = false;  // verbose or quiet
+boolean verbose = false;  // verbose or quiet
 
 
 void RingIMUsetup() {
@@ -195,7 +195,7 @@ void RingIMUloop() {
     pitch *= 180.0f / PI;
     roll *= 180.0f / PI;
 
-    if (!quiet) {
+    if (verbose) {
       BTS.println("");
       BTS.println("");
       BTS.println("       x       y       z");
