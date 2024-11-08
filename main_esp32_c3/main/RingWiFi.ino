@@ -157,7 +157,6 @@ const char index_html[] PROGMEM = R"rawliteral(
 
     <script>
         let activeButton = null;
-        let isProcessing = false;
         let commandInterval = null;
         const COMMAND_INTERVAL = 100; // Send command every 100ms
 
@@ -176,38 +175,41 @@ const char index_html[] PROGMEM = R"rawliteral(
             'kd_down': 'n'
         };
 
-        function sendCommand(cmd) {
-            if (isProcessing) return;
-            isProcessing = true;
+        // Continuous movement buttons
+        const movementButtons = ['up', 'down', 'left', 'right'];
 
-            fetch(`/?cmd=${cmd}`)
-                .then(response => response.text())
-                .then(data => {
-                    document.getElementById('response').innerText = data;
-                    isProcessing = false;
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    document.getElementById('response').innerText = 'Error sending command';
-                    isProcessing = false;
-                });
+        async function sendCommand(cmd) {
+            try {
+                const response = await fetch(`/?cmd=${cmd}`);
+                const data = await response.text();
+                document.getElementById('response').innerText = data;
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('response').innerText = 'Error sending command';
+            }
         }
 
-        function startCommand(buttonId) {
-            if (activeButton === buttonId) return;
-            stopCommand();
-            activeButton = buttonId;
+        function handleButtonPress(buttonId) {
+            // Clear any existing interval
+            if (commandInterval) {
+                clearInterval(commandInterval);
+                commandInterval = null;
+            }
+
+            // Send initial command immediately
             sendCommand(buttons[buttonId]);
-            
-            // Only set interval for movement controls
-            if (['up', 'down', 'left', 'right'].includes(buttonId)) {
+
+            // For movement buttons, set up interval for continuous sending
+            if (movementButtons.includes(buttonId)) {
+                activeButton = buttonId;
                 commandInterval = setInterval(() => {
                     sendCommand(buttons[buttonId]);
                 }, COMMAND_INTERVAL);
             }
         }
 
-        function stopCommand() {
+        function handleButtonRelease() {
+            // Clear interval and active button state
             if (commandInterval) {
                 clearInterval(commandInterval);
                 commandInterval = null;
@@ -223,19 +225,21 @@ const char index_html[] PROGMEM = R"rawliteral(
             // Mouse events
             button.addEventListener('mousedown', (e) => {
                 e.preventDefault();
-                startCommand(buttonId);
+                handleButtonPress(buttonId);
             });
 
             // Touch events
             button.addEventListener('touchstart', (e) => {
                 e.preventDefault();
-                startCommand(buttonId);
+                handleButtonPress(buttonId);
             });
 
-            // Only add mouseup/touchend for movement controls
-            if (['up', 'down', 'left', 'right'].includes(buttonId)) {
-                button.addEventListener('mouseup', stopCommand);
-                button.addEventListener('touchend', stopCommand);
+            // Only add release events for movement buttons
+            if (movementButtons.includes(buttonId)) {
+                button.addEventListener('mouseup', handleButtonRelease);
+                button.addEventListener('mouseleave', handleButtonRelease);
+                button.addEventListener('touchend', handleButtonRelease);
+                button.addEventListener('touchcancel', handleButtonRelease);
             }
         });
 
@@ -262,20 +266,20 @@ const char index_html[] PROGMEM = R"rawliteral(
         document.addEventListener('keydown', (e) => {
             const buttonId = keyMap[e.key];
             if (buttonId && !e.repeat) {
-                startCommand(buttonId);
+                handleButtonPress(buttonId);
             }
         });
 
         document.addEventListener('keyup', (e) => {
             const buttonId = keyMap[e.key];
-            if (buttonId && ['up', 'down', 'left', 'right'].includes(buttonId)) {
-                stopCommand();
+            if (buttonId && movementButtons.includes(buttonId)) {
+                handleButtonRelease();
             }
         });
 
-        // Handle cases where mouse/touch leaves the window
-        document.addEventListener('visibilitychange', stopCommand);
-        window.addEventListener('blur', stopCommand);
+        // Handle cases where mouse/touch leaves the window or page loses focus
+        document.addEventListener('visibilitychange', handleButtonRelease);
+        window.addEventListener('blur', handleButtonRelease);
     </script>
 </body>
 </html>
@@ -301,7 +305,7 @@ void RingWiFisetup() {
 
   // Route for root / web page
   server.on("/", HTTP_GET, []() {   // Called when there is a request
-    if (server.hasArg("cmd")) {     // commands: w, s, a, d, 0, z, x, c, v, b, n, r(default)
+    if (server.hasArg("cmd")) {     // commands: w, s, a, d, 0, z, x, c, v, b, n, r
       command = server.arg("cmd");  // This has to be global variable.
       // response is decided and modified at main.ino
       switch (command.charAt(0)) {
@@ -318,7 +322,7 @@ void RingWiFisetup() {
           rolls += 5;
           break;
         case '0':  // Reset: Full Stop
-          ringvs = 1500;
+          ringvs = 0;
           rolls = 0;
           break;
         case 'z':  // Kp

@@ -2,24 +2,27 @@
 
 #define SERVO_PIN 8
 
-Servo myservo;
+Servo srv;
 
 void setup() {
-    myservo.setPeriodHertz(50); // Standard 50hz servo
-    myservo.attach(SERVO_PIN, 500, 2400);
-    myservo.write(10);
-    Serial.begin(9600);
+  Serial.begin(9600);
+  srv.setPeriodHertz(50);  // Standard 50hz servo
+  srv.attach(SERVO_PIN, 500, 2500); // [500, 2500] -> [0, 270] 
+  srv.writeMicroseconds(1500); // Center
+  delay(1000);
 }
 
+int i = 1500;
+
 void loop() {
-    for(int i = 10; i < 180; i += 5) {
-        myservo.write(i);
-        Serial.println(i);
-        delay(1000);
-    }
-    for(int j = 175; j > 5; j -= 5) {
-        myservo.write(j);
-        Serial.println(j);
-        delay(1000);
-    }
+  for (; i < 2500; i += 5) {
+    srv.writeMicroseconds(i);
+    Serial.println(i);
+    delay(10);
+  }
+  for (; i > 500; i -= 5) {
+    srv.writeMicroseconds(i);
+    Serial.println(i);
+    delay(10);
+  }
 }
