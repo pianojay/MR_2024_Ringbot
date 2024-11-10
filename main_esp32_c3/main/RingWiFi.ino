@@ -6,6 +6,8 @@
             - Wifi connection
             - Server hosting; HTTP with HTML
             - handle/execute commands, write response
+
+          Put this in a same folder with main.ino
   #################################################################
 */
 

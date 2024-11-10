@@ -55,7 +55,7 @@ float SelfTest[6];
 float q[4] = { 1.0f, 0.0f, 0.0f, 0.0f };  // vector to hold quaternion
 uint32_t delt_t = 0;                      // used to control display output rate
 uint32_t count = 0;                       // used to control display output rate
-float pitch, yaw, roll;
+float pitch, yaw, roll;                   // roll is only used and calculated here.
 
 // parameters for 6 DoF sensor fusion calculations (Madgwick)
 float GyroMeasError = PI * (40.0f / 180.0f);     // gyroscope measurement error in rads/s (start at 60 deg/s), then reduce after ~10 s to 3
@@ -173,26 +173,33 @@ void RingIMUloop() {
   // Pass gyro rate as rad/s
   MadgwickQuaternionUpdate(ax, ay, az, gyrox * PI / 180.0f, gyroy * PI / 180.0f, gyroz * PI / 180.0f);
 
+
+  // Tait-Bryan angles (yaw, pitch, roll; from homogeneous rotation matrix from quaternions)
+  // Tait-Bryan angles as well as Euler angles are non-commutative.
+  // +z is toward Earth.
+  // yaw is the angel between sensor x and Earth magnet.
+  // pitch is the angle between sensor x and Earth ground plane (toward earth = positive)
+  // roll is the angle bwtween sensor y and Earth ground plane (toward sky = positive)
+  // For more see http://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
+
+  // yaw = atan2(2.0f * (q[1] * q[2] + q[0] * q[3]), q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3]);
+  // pitch = -asin(2.0f * (q[1] * q[3] - q[0] * q[2]));
+  roll = atan2(2.0f * (q[0] * q[1] + q[2] * q[3]), q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3]);
+
+  // We need to rotate 180 degrees by x-axis
+  // because "SOMEBODY" assembled MPU6050 in wrong orientation.
+  // Quaternion rotation r*q*(r^-1) where r = i results:
+  // q[2] = -q[2], q[3] = -q[3] (other terms are consistent)
+  // However, this results no change to atan2 argument terms...
+
+  // yaw *= 180.0f / PI;
+  // pitch *= 180.0f / PI;
+  roll *= 180.0f / PI;
+
   // Serial print and/or display at 0.5 s rate independent of data rates
   delt_t = millis() - count;
   if (delt_t > 500) {  // update LCD once per cycle independent of read rate
     digitalWrite(blinkPin, blinkOn);
-
-    // Tait-Bryan angles (yaw, pitch, roll; from homogeneous rotation matrix from quaternions)
-    // Tait-Bryan angles as well as Euler angles are non-commutative.
-    // +z is toward Earth.
-    // yaw is the angel between sensor x and Earth magnet.
-    // pitch is the angle between sensor x and Earth ground plane (toward earth = positive)
-    // roll is the angle bwtween sensor y and Earth ground plane (toward sky = positive)
-    // For more see http://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
-    yaw = atan2(2.0f * (q[1] * q[2] + q[0] * q[3]), q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3]);
-    pitch = -asin(2.0f * (q[1] * q[3] - q[0] * q[2]));
-    roll = atan2(2.0f * (q[0] * q[1] + q[2] * q[3]), q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3]);
-
-    yaw *= 180.0f / PI;
-    pitch *= 180.0f / PI;
-    roll *= 180.0f / PI;
-
     blinkOn = !blinkOn;
     count = millis();
   }
