@@ -186,12 +186,6 @@ void RingIMUloop() {
   // pitch = -asin(2.0f * (q[1] * q[3] - q[0] * q[2]));
   roll = atan2(2.0f * (q[0] * q[1] + q[2] * q[3]), q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3]);
 
-  // We need to rotate 180 degrees by x-axis
-  // because "SOMEBODY" assembled MPU6050 in wrong orientation.
-  // Quaternion rotation r*q*(r^-1) where r = i results:
-  // q[2] = -q[2], q[3] = -q[3] (other terms are consistent)
-  // However, this results no change to atan2 argument terms...
-
   // yaw *= 180.0f / PI;
   // pitch *= 180.0f / PI;
   roll *= 180.0f / PI;
