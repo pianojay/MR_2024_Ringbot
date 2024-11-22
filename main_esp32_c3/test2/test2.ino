@@ -1,7 +1,7 @@
 #include "ESP32Servo.h"
 
-#define arm1Pin 4
-#define arm2Pin 8
+#define arm1Pin 4  // left
+#define arm2Pin 8  // right
 Servo arm1, arm2;
 
 void setup() {
@@ -10,21 +10,25 @@ void setup() {
   arm2.setPeriodHertz(50);
   arm1.attach(arm1Pin, 500, 2500);
   arm2.attach(arm2Pin, 500, 2500);
-  arm1.write(0);
-  arm2.write(0);
+  arm1.write(75);
+  arm2.write(180-75);
 }
 
 int i = 0;
 
 void loop() {
   delay(2000);
-  for (; i <= 180; i += 1) {
-    srv.write(i);
+  for (; i <= 45; i += 1) {
+    arm1.write(i);
+    arm2.write(180 - i);
     Serial.println(i);
+    delay(100);
   }
-  delay(1000);
-  for (; i >= 0; i -= 1) {
-    srv.write(i);
+  delay(2000);
+  for (; i >= 25; i -= 1) {
+    arm1.write(i);
+    arm2.write(180 - i);
     Serial.println(i);
+    delay(100);
   }
 }

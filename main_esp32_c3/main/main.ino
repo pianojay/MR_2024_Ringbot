@@ -7,10 +7,6 @@
             RingWiFi.ino for RingWiFi
 
           TODO:
-            - Servo angle problem:
-              Each arm has a range of 0~180.
-              However, they should cover each semicircle. (left and right)
-              Need to convert the angles into their respective angle.
             - Parameter calibrations for actual hardware
   #################################################################
 */
@@ -37,8 +33,8 @@ extern String response;
 #define ring_PWM_Pin 7
 float ringv = 0, ringvs = 0;  // current, desired
 float factor = 0.1;           // Manual Tuning (EMA alpha factor)
-#define MinRingv -70          // based on educated guess
-#define MaxRingv 70
+#define MinRingv -100          // based on educated guess
+#define MaxRingv 100
 
 void ringvsmoother() {  // exponential moving average, for smooth control
   ringv = ringv * (1.0 - factor) + ringvs * factor;
@@ -53,16 +49,19 @@ void ringwrite() {  // ringv is an integer; write sign and magnitude
 // Servo motor: DS3120MG; Based on PWM specifications!
 // which is which arm ?? considering arm1 as left, arm2 as right, for now.
 // if opposite, just change pin number.
-#define arm1Pin 4
-#define arm2Pin 8
+#define arm1Pin 4  // 4 = left
+#define arm2Pin 8  // 8 = right
 Servo arm1, arm2;
-double rolli, armao = 0, rolls = 0;            // current roll (sensor), servo PWM, desired roll
-double armkp = 0.0, armki = 0.0, armkd = 0.0;  // unit: Per mile. TODO: Manual Tuning
-PID armPid(&rolli, &armao, &rolls, armkp / 1000, armki / 1000, armkd / 1000, DIRECT);
-#define ArmaDev 60    // Deviation; Determine the actual servo PWM from armao
-#define ArmWidth 10   // To compensate each arm's width
+double rolli, armao = 0, rolls = 0;             // current roll (sensor), servo PWM, desired roll
+double armkp = 30.0, armki = 0.0, armkd = 0.0;  // unit: percent. TODO: Manual Tuning
+#define Res 100
+PID armPid(&rolli, &armao, &rolls, armkp / Res, armki / Res, armkd / Res, REVERSE);
+#define ArmaDev 90    // Deviation; Determine the actual servo PWM from armao
+#define ArmWidth 10   // To compensate each arm's thickness
 #define MinRolls -45  // To prevent excessive tilting
 #define MaxRolls 45
+#define Compensate 0   // angle exceeding of arm1 from arm2
+#define Compensate2 4  // angle to stand upright when symmetric
 
 
 // MPU6050; Check RingIMU.ino, which should be in a same file.
@@ -76,20 +75,20 @@ extern float roll;
 
 
 // Fall control
-#define FallRoll 45
-#define ResetRoll 2.5
-#define ResetV 2.5
-#define FreeV 5
+#define FallRoll 50
+#define ResetRoll 5
+#define ResetV 15
+#define FreeV 65
 bool isFall = false;
 bool isReset = true;  // initial state is considred as a reset.
 
-#define FallArma 30  // TODO: speculation... we need to measure correct angle.
+#define FallArma 40  // TODO: speculation... we need to measure correct angle.
 void catchfall() {
   // The two arm touches the ground symmetrically;
   // the ring should become perpendicular after this, assuming the ground is flat.
   // For this to work on any uneven plane, we need more modelling and calculations...
-  arm1.write(FallArma);
-  arm2.write(180 - FallArma);
+  arm1.write(FallArma - Compensate - rolls + Compensate2);
+  arm2.write(180 - FallArma - rolls + Compensate2);
 }
 
 
@@ -97,7 +96,7 @@ void setup() {
   // Serial is only used for debugging while connected to Arduino IDE terminal.
   Serial.begin(115200);
   unsigned long waiting = millis();
-  while (!Serial && millis() - waiting < 1000)  // waiting connection for a second
+  while (!Serial && millis() - waiting < 100)  // waiting connection for 0.1 sec
     ;
   if (Serial) Serial.println("Serial Connected!");
 
@@ -107,7 +106,6 @@ void setup() {
   // BLDC setup
   pinMode(ring_DIR_Pin, OUTPUT);
   pinMode(ring_PWM_Pin, OUTPUT);
-  ringwrite();
 
   // Servo setup
   arm1.setPeriodHertz(50);  // based on PWM spec
@@ -118,7 +116,7 @@ void setup() {
 
   // PID setup
   armPid.SetMode(AUTOMATIC);
-  armPid.SetOutputLimits(-ArmaDev + ArmWidth, ArmaDev - ArmWidth);
+  armPid.SetOutputLimits(max(ArmWidth - ArmaDev, ArmaDev - 180), min(ArmaDev - ArmWidth, 180 - ArmaDev));
 
   // MPU6050 setup
   RingIMU::RingIMUsetup();
@@ -155,6 +153,7 @@ void loop() {
   if (isFall) {
     if (Serial) Serial.println("I am Fall");
     ringvs = 0;
+    rolls = 0;
     catchfall();
     isReset = false;
 
@@ -173,6 +172,7 @@ void loop() {
     // Detect enough velocity; break from reset, continue with PID control.
     if (abs(ringv) >= FreeV) {  // if speed more or equal to 5
       isReset = false;
+      rolls = 2.5 * (int)(rolli / 2.5); // round toward zero, unit of 2.5
     }
   }
 
@@ -185,15 +185,18 @@ void loop() {
   rolls = constrain(rolls, MinRolls, MaxRolls);
 
   // for interactive tuning, if applicable
-  armkp = constrain(armkp, 0, 10000);
-  armki = constrain(armki, 0, 10000);
-  armkd = constrain(armkd, 0, 10000);
-  armPid.SetTunings(armkp, armki, armkd);
+  armkp = constrain(armkp, 0, 100);
+  armki = constrain(armki, 0, 100);
+  armkd = constrain(armkd, 0, 100);
+  armPid.SetTunings(armkp / Res, armki / Res, armkd / Res);
 
   // PID control update
   if (!isFall && !isReset) {
+    if (ringv < FreeV) {
+      isReset = true;
+    }
     armPid.Compute();
-    arm1.write(armao - ArmaDev + 180);
-    arm2.write(armao + ArmaDev);
+    arm1.write(armao - ArmaDev + 180 + Compensate2);
+    arm2.write(armao + ArmaDev + Compensate2);
   }
 }

@@ -43,7 +43,7 @@ const char index_html[] PROGMEM = R"rawliteral(
         }
         h1 {
             font-size: 20px;
-            margin: 10px 0;
+            margin: 14px 0;
         }
         .button {
             background-color: #4CAF50;
@@ -51,7 +51,7 @@ const char index_html[] PROGMEM = R"rawliteral(
             color: white;
             padding: 12px 12px;
             text-decoration: none;
-            font-size: 18px;
+            font-size: 72px;
             margin: 2px;
             cursor: pointer;
             border-radius: 4px;
@@ -66,15 +66,15 @@ const char index_html[] PROGMEM = R"rawliteral(
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 5px;
-            max-width: 180px;
-            margin: 10px auto;
+            max-width: 360px;
+            margin: 14px auto;
         }
         .pid-controls {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 5px;
             max-width: 360px;
-            margin: 10px auto;
+            margin: 14px auto;
         }
         .pid-group {
             border: 1px solid #ccc;
@@ -86,23 +86,23 @@ const char index_html[] PROGMEM = R"rawliteral(
             font-size: 14px;
         }
         .pid-button {
-            font-size: 14px;
+            font-size: 18px;
             padding: 8px 4px;
         }
         .utility-buttons {
             display: flex;
-            gap: 10px;
+            gap: 20px;
             justify-content: center;
-            margin: 10px auto;
+            margin: 14px auto;
         }
         .stop-button {
             background-color: #ff4444;
-            font-size: 18px;
+            font-size: 36px;
             padding: 12px 24px;
         }
         .refresh-button {
             background-color: #2196F3;
-            font-size: 18px;
+            font-size: 36px;
             padding: 12px 24px;
         }
         #response {
@@ -119,22 +119,6 @@ const char index_html[] PROGMEM = R"rawliteral(
 </head>
 <body>
     <h1>ESP32 Control Panel</h1>
-    
-    <!-- Movement Controls -->
-    <div class="controls">
-        <div></div>
-        <button class="button" id="up">W</button>
-        <div></div>
-        <button class="button" id="left">A</button>
-        <button class="button" id="down">S</button>
-        <button class="button" id="right">D</button>
-    </div>
-
-    <!-- Utility Buttons -->
-    <div class="utility-buttons">
-        <button class="button stop-button" id="stop">STOP</button>
-        <button class="button refresh-button" id="refresh">↻</button>
-    </div>
 
     <!-- PID Controls -->
     <div class="pid-controls">
@@ -153,6 +137,22 @@ const char index_html[] PROGMEM = R"rawliteral(
             <button class="button pid-button" id="kd_up">+</button>
             <button class="button pid-button" id="kd_down">-</button>
         </div>
+    </div>
+
+    <!-- Utility Buttons -->
+    <div class="utility-buttons">
+        <button class="button stop-button" id="stop">STOP</button>
+        <button class="button refresh-button" id="refresh">↻</button>
+    </div>
+
+    <!-- Movement Controls -->
+    <div class="controls">
+        <div></div>
+        <button class="button" id="up">W</button>
+        <div></div>
+        <button class="button" id="left">A</button>
+        <button class="button" id="down">S</button>
+        <button class="button" id="right">D</button>
     </div>
 
     <div id="response">Response will appear here</div>
@@ -312,16 +312,16 @@ void RingWiFisetup() {
       // response is decided and modified at main.ino
       switch (command.charAt(0)) {
         case 'w':  // Forward acceleration
-          ringvs += 5;
+          ringvs += 10;
           break;
         case 's':  // Backward acceleration
-          ringvs -= 5;
+          ringvs -= 10;
           break;
         case 'a':  // Roll Left
-          rolls -= 5;
+          rolls += 2.5;
           break;
         case 'd':  // Roll Right
-          rolls += 5;
+          rolls -= 2.5;
           break;
         case '0':  // Reset: Full Stop
           ringvs = 0;
@@ -340,10 +340,10 @@ void RingWiFisetup() {
           armki -= 5;
           break;
         case 'b':  // Kd
-          armkd += 5;
+          armkd += 1;
           break;
         case 'n':  // Kd
-          armkd -= 5;
+          armkd -= 1;
           break;
         default:  // (refresh)
           break;
