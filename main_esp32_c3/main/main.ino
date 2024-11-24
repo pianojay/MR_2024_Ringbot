@@ -16,7 +16,7 @@
 #include <PID_v1.h>      // for PID control
 #include <ESP32Servo.h>  // ESP32Servo: for servo
 #include <Wire.h>        // for MPU6050
-#include <MPU6050.h>     // for MPU6050; https://github.com/ElectronicCats/mpu6050
+#include <MPU6050.h>     // for MPU6050
 
 
 // WiFi and HTTP server; Check RingWiFi.ino, which should be in a same file.
@@ -28,7 +28,7 @@ extern String response;
 }
 
 
-// BLDC motor
+// Motor
 #define ring_DIR_Pin 3
 #define ring_PWM_Pin 7
 float ringv = 0, ringvs = 0;  // current, desired
@@ -103,7 +103,7 @@ void setup() {
   // WiFi server setup
   RingWiFi::RingWiFisetup();
 
-  // BLDC setup
+  // Motor setup
   pinMode(ring_DIR_Pin, OUTPUT);
   pinMode(ring_PWM_Pin, OUTPUT);
 
@@ -176,7 +176,7 @@ void loop() {
     }
   }
 
-  // Update BLDC
+  // Update Motor
   ringvs = constrain(ringvs, MinRingv, MaxRingv);
   ringvsmoother();
   ringwrite();
